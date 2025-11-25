@@ -56,26 +56,9 @@ The server reads Chrome bookmarks from the default location:
 
 To use a different Chrome profile, modify the `get_chrome_bookmarks_path()` function in `src/bookmarks_reader.py` or pass a custom path.
 
-## Usage
-
-### Running the MCP Server
-
-Run the server using stdio transport:
-
-```bash
-make run
-```
-
-### MCP Client Configuration
-
-
-
-The server will communicate via stdin/stdout using the MCP protocol. When run directly, it will wait for MCP protocol messages on stdin and respond on stdout.
-
-### MCP Client Configuration (Cursor)
+## MCP Client Configuration (Cursor)
 
 To use this server with Cursor, add it to your MCP configuration file (typically `~/.cursor/mcp.json`):
-
 ```json
 {
   "mcpServers": {
@@ -91,9 +74,6 @@ To use this server with Cursor, add it to your MCP configuration file (typically
 - Replace `/absolute/path/to/bookmarks-aware-mcp` with the absolute path to this project directory
 - Ensure you're using the correct Python interpreter (e.g., `python3` vs `python`)
 - The script will automatically add the project root to Python's path, so no `cwd` is needed
-- Make sure your virtual environment is activated or the `mcp` package is installed globally
-
-After updating the configuration, restart Cursor to load the MCP server.
 
 ### Available Tools
 
