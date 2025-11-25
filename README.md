@@ -2,6 +2,29 @@
 
 A Model Context Protocol (MCP) server that provides read-only access to Chrome bookmarks with keyword-based search capabilities.
 
+## Example Usage
+
+Here's a real-world example of how the MCP server helps find and use bookmarked content:
+
+**User Query:**
+> "I don't remember how to build a durable execution engine with SQLite. But I do remember to read it in the web and bookmark the blog post. Find it to me and use to explain how to do it."
+
+**What happens:**
+1. The LLM (Cursor) recognizes the need to search bookmarks
+2. It calls the `get_bookmarks` tool with the query: "durable execution engine SQLite"
+3. The MCP server returns the relevant bookmark:
+   ```json
+   {
+     "url": "https://www.morling.dev/blog/building-durable-execution-engine-with-sqlite/",
+     "title": "Building a Durable Execution Engine with SQLite",
+     "description": "https://www.morling.dev/blog/building-durable-execution-engine-with-sqlite/"
+   }
+   ```
+4. The LLM uses the bookmark URL to fetch the content and provides a detailed explanation based on the bookmarked article
+
+This demonstrates how the MCP server bridges the gap between your bookmarked knowledge and your current questions, making your bookmarks searchable and accessible through natural language queries.
+
+
 ## Features
 
 - Reads Chrome bookmarks directly from the browser's data directory
@@ -97,28 +120,6 @@ A JSON array of bookmarks, each containing:
   }
 ]
 ```
-
-## Example Usage
-
-Here's a real-world example of how the MCP server helps find and use bookmarked content:
-
-**User Query:**
-> "I don't remember how to build a durable execution engine with SQLite. But I do remember to read it in the web and bookmark the blog post. Find it to me and use to explain how to do it."
-
-**What happens:**
-1. The LLM (Cursor) recognizes the need to search bookmarks
-2. It calls the `get_bookmarks` tool with the query: "durable execution engine SQLite"
-3. The MCP server returns the relevant bookmark:
-   ```json
-   {
-     "url": "https://www.morling.dev/blog/building-durable-execution-engine-with-sqlite/",
-     "title": "Building a Durable Execution Engine with SQLite",
-     "description": "https://www.morling.dev/blog/building-durable-execution-engine-with-sqlite/"
-   }
-   ```
-4. The LLM uses the bookmark URL to fetch the content and provides a detailed explanation based on the bookmarked article
-
-This demonstrates how the MCP server bridges the gap between your bookmarked knowledge and your current questions, making your bookmarks searchable and accessible through natural language queries.
 
 ## Architecture
 
