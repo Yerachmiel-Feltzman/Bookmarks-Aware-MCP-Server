@@ -1,4 +1,24 @@
-<!-- cc71e405-8cb2-4dc4-b2cc-2bddd9ae8ce7 55b124cc-602a-41e0-9516-9331872f57b5 -->
+---
+name: Bookmarks-Aware MCP Server Implementation
+overview: ""
+todos:
+  - id: 2bfe478a-3566-45b2-8a74-368c8e18b6b8
+    content: Create project structure, requirements.txt, and .gitignore
+    status: pending
+  - id: 8cf393e7-15d4-4cd5-a380-6ff4eedd97fa
+    content: Implement Chrome bookmarks JSON parser in src/bookmarks_reader.py
+    status: pending
+  - id: 6a793fd9-572a-4fd8-9a62-f40ec850243e
+    content: Build keyword-based search with extensible interface in src/search.py
+    status: pending
+  - id: 7e174e5d-6c24-450b-b8ec-3662b1f0ef40
+    content: Create MCP server with get_bookmarks tool in src/server.py
+    status: pending
+  - id: 5d4fece1-2532-45ed-accc-155a25fe611d
+    content: Write README with setup and usage instructions
+    status: pending
+---
+
 # Bookmarks-Aware MCP Server Implementation
 
 ## Architecture Overview
@@ -54,11 +74,3 @@ Build a Python MCP server with three core modules:
 - **Simple First**: Start with basic string matching, no external APIs or vector databases
 - **Read-only**: No bookmark modifications, only read access
 - **Error Handling**: Graceful degradation if bookmarks file not found
-
-### To-dos
-
-- [ ] Create project structure, requirements.txt, and .gitignore
-- [ ] Implement Chrome bookmarks JSON parser in src/bookmarks_reader.py
-- [ ] Build keyword-based search with extensible interface in src/search.py
-- [ ] Create MCP server with get_bookmarks tool in src/server.py
-- [ ] Write README with setup and usage instructions
