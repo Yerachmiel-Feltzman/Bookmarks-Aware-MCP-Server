@@ -182,3 +182,30 @@ This document records key design decisions, the alternatives considered, and why
 - Single tool call to validate the entire setup
 - Surfaces the most common issue (wrong Chrome profile) with actionable guidance
 - Also useful for ongoing diagnostics when something seems wrong
+
+---
+
+## ADR-8: Chrome Extension Bridge Over General Browser Automation
+
+**Status:** Accepted
+
+**Context:** Should we pivot to (or adopt) a general-purpose Chrome browser automation MCP like [mcp-chrome-integration](https://github.com/dlwjdtn535/mcp-chrome-integration) instead of our focused bookmark-only extension bridge?
+
+**Options considered:**
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Adopt mcp-chrome-integration** | Existing project, broad automation (click, navigate, type) | Bookmarks NOT actually implemented (only listed in README), 20+ permissions (tabs, scripting, history, downloads, clipboard, cookies, debugger, geolocation, etc.), content scripts injected on ALL pages, small/inactive project (6 stars, 25 commits), no tests |
+| **Keep focused bookmark bridge (chosen)** | Minimal permissions (`bookmarks` only), no content scripts, already working with bridge-first write pattern, 101 tests | Only handles bookmarks, no general browser automation |
+
+**Decision:** Keep our focused Chrome extension bridge. Do not adopt mcp-chrome-integration.
+
+**Rationale:**
+- mcp-chrome-integration's bookmark management is **vaporware** -- the README lists it but zero bookmark tools exist in the code (checked Feb 2026: server.py has only page automation tools like navigate, click, type, extract_table)
+- Even if bookmarks were implemented, it would be thin CRUD without our enrichment, search, metadata, change tracking, or undo capabilities
+- Security: their extension requests every Chrome permission and injects content scripts into all pages -- massive attack surface for a bookmark tool
+- Our extension requests only `bookmarks` permission and communicates over localhost WebSocket -- minimal and appropriate
+- Our bridge-first write pattern is already working and tested
+- General browser automation (navigate, click, type) is orthogonal to bookmark management -- different problem space
+
+**Future consideration:** A "Smart Bookmark Assistant" Chrome extension (with LLM connection for auto-folder-suggestion and Q&A) is tracked in the backlog as a separate enhancement. This would build ON TOP of our existing server (calling it via HTTP), not replace it. The mcp-chrome-integration architecture provides no foundation for this either.

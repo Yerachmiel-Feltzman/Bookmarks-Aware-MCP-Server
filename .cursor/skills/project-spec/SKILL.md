@@ -26,13 +26,14 @@ No LLM dependencies -- enrichment is agent-driven (see Enrichment Architecture b
 ```
 src/
 ├── main.py            # Entry point - runs asyncio.run(main())
-├── server.py          # MCP server, 17 tool definitions, caches
+├── server.py          # MCP server, 17 tool definitions, bridge-first writes
 ├── bookmarks_store.py # Chrome bookmarks read/write/add (cross-platform)
 ├── search.py          # Search engine with metadata support
 ├── metadata_store.py  # SQLite store for summaries and tags
 ├── change_tracker.py  # Change history + undo (bookmark_changes table in same DB)
+├── chrome_bridge.py   # WebSocket bridge to Chrome extension for live writes
 ├── enrichment.py      # Page fetching + content extraction (no LLM)
-├── config.py          # Configuration (enrichment settings, Chrome profile)
+├── config.py          # Configuration (enrichment settings, Chrome profile, bridge port)
 └── bookmarks_reader.py # (legacy, kept for compatibility)
 ```
 
@@ -128,7 +129,8 @@ This means:
 4. **Extensible search**: `SearchEngine` protocol for swappable implementations
 5. **Local-first metadata**: SQLite at `~/.bookmarks-mcp/metadata.db`
 6. **Configurable Chrome profile**: `BOOKMARKS_CHROME_PROFILE` env var
-7. **Graceful errors**: Missing files return safe defaults with warnings
+7. **Chrome extension bridge**: WebSocket bridge routes writes through `chrome.bookmarks` API for live editing; falls back to file when disconnected
+8. **Graceful errors**: Missing files return safe defaults with warnings
 8. **Cross-platform**: Handles Windows, macOS, Linux, and Chromium paths
 9. **Rate limiting**: Configurable limits for page fetching
 
@@ -218,3 +220,4 @@ Configure in MCP client (e.g., `~/.cursor/mcp.json`):
 | `BOOKMARKS_TIMEOUT` | `30.0` | HTTP request timeout (seconds) |
 | `BOOKMARKS_METADATA_DB` | `~/.bookmarks-mcp/metadata.db` | Custom DB path |
 | `BOOKMARKS_CHROME_PROFILE` | `Default` | Chrome profile name (e.g., `Profile 1`) |
+| `BOOKMARKS_BRIDGE_PORT` | `8765` | WebSocket port for Chrome extension bridge |

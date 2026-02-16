@@ -29,8 +29,16 @@
 - `bulk_reorganize` - Batch move multiple bookmarks
 - Automatic backup before any write operation
 
+### Chrome Extension Bridge
+- MV3 Chrome extension (`chrome-extension/`) with `bookmarks` permission and WebSocket service worker
+- `src/chrome_bridge.py` -- async WebSocket server bridging MCP to Chrome's `chrome.bookmarks` API
+- Bridge-first write pattern: all write tools try extension first, fall back to file editing
+- `health_check` reports bridge connection status
+- `BOOKMARKS_BRIDGE_PORT` env var for configurable port
+- Auto-reconnect and 20s keepalive to prevent service worker termination
+
 ### Testing & Quality
-- Unit test suite with pytest (85 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools, enrich_all
+- Unit test suite with pytest (101 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools, enrich_all, chrome_bridge
 - `make test` command
 - Bug fix: folder path consistency (root key prefix instead of display name)
 
@@ -64,10 +72,15 @@
 ### Feature Enhancements
 - [done] P1: Multiple Chrome profiles - Supported via BOOKMARKS_CHROME_PROFILE env var
 - [backlog] P2: Multi-browser support - Add Firefox, Safari, Edge bookmark reading
-- [backlog] P2: Chrome extension - Real-time bookmark sync, context capture, quick search UI
+- [done] P2: Chrome extension bridge - Live bookmark editing via WebSocket + chrome.bookmarks API
 
 ### Infrastructure
 - [backlog] P1: Remote sync - Cross-machine metadata sync (options: Dropbox/iCloud file sync, Turso, CRDTs)
+
+### Chrome Extension: Smart Bookmark Assistant
+- [backlog] P2: Smart add UI - Chrome extension popup that lets users add a bookmark and auto-suggests the best folder using LLM intelligence (leverages existing folder structure + enrichment data from the MCP server)
+- [backlog] P2: Bookmark Q&A UI - Extension popup panel for asking natural-language questions about bookmarks (e.g., "do I have anything about distributed SQLite?"), powered by the MCP server's search + metadata
+- [backlog] P2: Extension-to-server HTTP API - Thin HTTP layer over the MCP server so the Chrome extension can call search/add/folder-suggest without needing a full MCP client
 
 ### Developer Experience
 - [backlog] P1: Linting and formatting - Set up ruff for consistent code style

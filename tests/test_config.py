@@ -35,3 +35,12 @@ class TestConfig:
         monkeypatch.delenv("BOOKMARKS_CHROME_PROFILE", raising=False)
         config = Config.from_env()
         assert config.chrome_profile == "Default"
+
+    def test_bridge_port_default(self):
+        config = Config()
+        assert config.bridge_port == 8765
+
+    def test_bridge_port_from_env(self, monkeypatch):
+        monkeypatch.setenv("BOOKMARKS_BRIDGE_PORT", "9999")
+        config = Config.from_env()
+        assert config.bridge_port == 9999

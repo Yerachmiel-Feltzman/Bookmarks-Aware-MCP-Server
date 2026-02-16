@@ -29,6 +29,7 @@ from src.search import KeywordSearchEngine, SearchEngine
 from src.metadata_store import get_metadata_store
 from src.enrichment import fetch_page_content, compute_content_hash
 from src.change_tracker import get_change_tracker
+from src.chrome_bridge import get_bridge
 from src.config import get_config
 
 
@@ -36,6 +37,16 @@ from src.config import get_config
 _bookmarks_cache: Optional[list] = None
 _search_engine: SearchEngine = KeywordSearchEngine()
 _metadata_cache: Optional[Dict[str, Dict[str, Any]]] = None
+
+
+def _urls_match(a: str, b: str) -> bool:
+    """Compare URLs accounting for trailing-slash normalization by Chrome."""
+    return a.rstrip("/") == b.rstrip("/")
+
+
+def _find_bookmark(bookmarks: list, url: str) -> Optional[dict]:
+    """Find a bookmark by URL, tolerant of trailing-slash differences."""
+    return next((b for b in bookmarks if _urls_match(b["url"], url)), None)
 
 
 def _get_bookmarks_path() -> Path:
@@ -142,6 +153,12 @@ async def health_check_tool() -> list[TextContent]:
         report["change_tracker_initialized"] = False
         report["change_tracker_error"] = str(e)
 
+    # Chrome extension bridge
+    bridge = get_bridge()
+    report["bridge_running"] = bridge.is_running
+    report["bridge_connected"] = bridge.is_connected
+    report["bridge_port"] = bridge.port
+
     # Overall status
     issues = []
     if not report.get("bookmarks_file_exists"):
@@ -150,6 +167,8 @@ async def health_check_tool() -> list[TextContent]:
         issues.append("Cannot read bookmarks file.")
     if report.get("unenriched_bookmarks", 0) > 0:
         issues.append(f"{report['unenriched_bookmarks']} bookmarks have no metadata. Call enrich_all to fetch their content in batches, then generate summaries and tags for each.")
+    if not report.get("bridge_connected"):
+        issues.append("Chrome extension bridge not connected. Bookmark writes will edit the file directly (requires Chrome to be closed). Install the extension from chrome-extension/ for live editing.")
 
     report["status"] = "healthy" if not issues else "issues_found"
     report["issues"] = issues
@@ -342,8 +361,22 @@ async def enrich_all_tool(batch_size: int = 5) -> list[TextContent]:
 async def add_bookmark_tool(url: str, title: str, folder: str) -> list[TextContent]:
     """Add a new bookmark and auto-fetch page content for enrichment."""
     try:
-        path = _get_bookmarks_path()
-        success = add_bookmark(url, title, folder, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success = False
+
+        if bridge.is_connected:
+            try:
+                await bridge.create_bookmark(url, title, folder)
+                used_bridge = True
+                success = True
+            except Exception as e:
+                print(f"[ChromeBridge] create failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success = add_bookmark(url, title, folder, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success:
@@ -389,13 +422,28 @@ async def add_bookmark_tool(url: str, title: str, folder: str) -> list[TextConte
 async def move_bookmark_tool(url: str, target_folder: str) -> list[TextContent]:
     """Move a bookmark to a different folder."""
     try:
-        # Capture before state for undo
         bookmarks = load_bookmarks()
-        bookmark = next((b for b in bookmarks if b["url"] == url), None)
+        bookmark = _find_bookmark(bookmarks, url)
         original_folder = bookmark["folder"] if bookmark else None
 
-        path = _get_bookmarks_path()
-        success = move_bookmark(url, target_folder, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success = False
+
+        bridge_error = None
+        if bridge.is_connected:
+            try:
+                await bridge.move_bookmark(url, target_folder)
+                used_bridge = True
+                success = True
+            except Exception as e:
+                bridge_error = str(e)
+                print(f"[ChromeBridge] move failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success = move_bookmark(url, target_folder, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success:
@@ -406,7 +454,8 @@ async def move_bookmark_tool(url: str, target_folder: str) -> list[TextContent]:
             })
             return [TextContent(type="text", text=f"Successfully moved bookmark to {target_folder}")]
         else:
-            return [TextContent(type="text", text="Failed to move bookmark. Check that the URL and folder exist.")]
+            detail = f" Bridge error: {bridge_error}" if bridge_error else ""
+            return [TextContent(type="text", text=f"Failed to move bookmark. Check that the URL and folder exist.{detail}")]
     except Exception as e:
         return [TextContent(type="text", text=f"Error moving bookmark: {e}")]
 
@@ -415,11 +464,25 @@ async def rename_bookmark_tool(url: str, new_title: str) -> list[TextContent]:
     """Rename a bookmark."""
     try:
         bookmarks = load_bookmarks()
-        bookmark = next((b for b in bookmarks if b["url"] == url), None)
+        bookmark = _find_bookmark(bookmarks, url)
         original_title = bookmark["title"] if bookmark else None
 
-        path = _get_bookmarks_path()
-        success = rename_bookmark(url, new_title, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success = False
+
+        if bridge.is_connected:
+            try:
+                await bridge.rename_bookmark(url, new_title)
+                used_bridge = True
+                success = True
+            except Exception as e:
+                print(f"[ChromeBridge] rename failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success = rename_bookmark(url, new_title, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success:
@@ -439,12 +502,26 @@ async def delete_bookmark_tool(url: str) -> list[TextContent]:
     """Delete a bookmark."""
     try:
         bookmarks = load_bookmarks()
-        bookmark = next((b for b in bookmarks if b["url"] == url), None)
+        bookmark = _find_bookmark(bookmarks, url)
         original_title = bookmark["title"] if bookmark else None
         original_folder = bookmark["folder"] if bookmark else None
 
-        path = _get_bookmarks_path()
-        success = delete_bookmark(url, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success = False
+
+        if bridge.is_connected:
+            try:
+                await bridge.delete_bookmark(url)
+                used_bridge = True
+                success = True
+            except Exception as e:
+                print(f"[ChromeBridge] delete failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success = delete_bookmark(url, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success:
@@ -463,8 +540,22 @@ async def delete_bookmark_tool(url: str) -> list[TextContent]:
 async def create_folder_tool(folder_name: str, parent_folder: str) -> list[TextContent]:
     """Create a new bookmark folder."""
     try:
-        path = _get_bookmarks_path()
-        success = create_folder(folder_name, parent_folder, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success = False
+
+        if bridge.is_connected:
+            try:
+                await bridge.create_folder(folder_name, parent_folder)
+                used_bridge = True
+                success = True
+            except Exception as e:
+                print(f"[ChromeBridge] create_folder failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success = create_folder(folder_name, parent_folder, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success:
@@ -494,11 +585,10 @@ async def get_folder_structure_tool() -> list[TextContent]:
 async def bulk_reorganize_tool(moves: List[Dict[str, str]]) -> list[TextContent]:
     """Bulk-move bookmarks."""
     try:
-        # Capture before state for undo
         bookmarks = load_bookmarks()
         before_state = []
         for move in moves:
-            bm = next((b for b in bookmarks if b["url"] == move.get("url")), None)
+            bm = _find_bookmark(bookmarks, move.get("url", ""))
             if bm:
                 before_state.append({
                     "url": bm["url"],
@@ -506,8 +596,21 @@ async def bulk_reorganize_tool(moves: List[Dict[str, str]]) -> list[TextContent]
                     "target_folder": move.get("target_folder"),
                 })
 
-        path = _get_bookmarks_path()
-        success_count = bulk_move_bookmarks(moves, bookmarks_path=path)
+        bridge = get_bridge()
+        used_bridge = False
+        success_count = 0
+
+        if bridge.is_connected:
+            try:
+                success_count = await bridge.bulk_move(moves)
+                used_bridge = True
+            except Exception as e:
+                print(f"[ChromeBridge] bulk_move failed, falling back to file: {e}", file=sys.stderr)
+
+        if not used_bridge:
+            path = _get_bookmarks_path()
+            success_count = bulk_move_bookmarks(moves, bookmarks_path=path)
+
         invalidate_bookmarks_cache()
 
         if success_count > 0:
@@ -554,35 +657,62 @@ async def revert_last_change_tool() -> list[TextContent]:
         details = change["details"]
         url = change.get("url")
         success = False
+        bridge = get_bridge()
         path = _get_bookmarks_path()
 
         if action == "move":
             original_folder = details.get("from_folder")
             if url and original_folder:
-                success = move_bookmark(url, original_folder, bookmarks_path=path)
+                if bridge.is_connected:
+                    try:
+                        await bridge.move_bookmark(url, original_folder)
+                        success = True
+                    except Exception:
+                        success = move_bookmark(url, original_folder, bookmarks_path=path)
+                else:
+                    success = move_bookmark(url, original_folder, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "rename":
             old_title = details.get("old_title")
             if url and old_title:
-                success = rename_bookmark(url, old_title, bookmarks_path=path)
+                if bridge.is_connected:
+                    try:
+                        await bridge.rename_bookmark(url, old_title)
+                        success = True
+                    except Exception:
+                        success = rename_bookmark(url, old_title, bookmarks_path=path)
+                else:
+                    success = rename_bookmark(url, old_title, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "delete":
             title = details.get("title", "Untitled")
             folder = details.get("folder", "bookmark_bar")
             if url:
-                success = add_bookmark(url, title, folder, bookmarks_path=path)
+                if bridge.is_connected:
+                    try:
+                        await bridge.create_bookmark(url, title, folder)
+                        success = True
+                    except Exception:
+                        success = add_bookmark(url, title, folder, bookmarks_path=path)
+                else:
+                    success = add_bookmark(url, title, folder, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "add":
             if url:
-                success = delete_bookmark(url, bookmarks_path=path)
+                if bridge.is_connected:
+                    try:
+                        await bridge.delete_bookmark(url)
+                        success = True
+                    except Exception:
+                        success = delete_bookmark(url, bookmarks_path=path)
+                else:
+                    success = delete_bookmark(url, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "create_folder":
-            # Cannot easily delete a folder via the current API.
-            # Mark as reverted but warn.
             await tracker.mark_reverted(change["id"])
             return [TextContent(type="text", text=json.dumps({
                 "status": "skipped",
@@ -598,8 +728,16 @@ async def revert_last_change_tool() -> list[TextContent]:
                 if m.get("url") and m.get("original_folder")
             ]
             if revert_moves:
-                count = bulk_move_bookmarks(revert_moves, bookmarks_path=path)
-                success = count > 0
+                if bridge.is_connected:
+                    try:
+                        count = await bridge.bulk_move(revert_moves)
+                        success = count > 0
+                    except Exception:
+                        count = bulk_move_bookmarks(revert_moves, bookmarks_path=path)
+                        success = count > 0
+                else:
+                    count = bulk_move_bookmarks(revert_moves, bookmarks_path=path)
+                    success = count > 0
                 invalidate_bookmarks_cache()
 
         if success:
@@ -1021,6 +1159,13 @@ async def main():
     """Main entry point for the MCP server."""
     server = create_server()
 
-    async with stdio_server() as (read_stream, write_stream):
-        initialization_options = server.create_initialization_options()
-        await server.run(read_stream, write_stream, initialization_options)
+    # Start Chrome extension bridge (non-blocking WebSocket server)
+    bridge = get_bridge()
+    await bridge.start()
+
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            initialization_options = server.create_initialization_options()
+            await server.run(read_stream, write_stream, initialization_options)
+    finally:
+        await bridge.stop()

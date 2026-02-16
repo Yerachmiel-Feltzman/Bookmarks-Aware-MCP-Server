@@ -37,6 +37,7 @@ class Config:
     enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig.from_env)
     metadata_db_path: Optional[Path] = None  # None = use default
     chrome_profile: str = "Default"  # Chrome profile name
+    bridge_port: int = 8765  # WebSocket port for Chrome extension bridge
     
     @classmethod
     def from_env(cls) -> "Config":
@@ -48,6 +49,7 @@ class Config:
             enrichment=EnrichmentConfig.from_env(),
             metadata_db_path=db_path,
             chrome_profile=os.environ.get("BOOKMARKS_CHROME_PROFILE", "Default"),
+            bridge_port=int(os.environ.get("BOOKMARKS_BRIDGE_PORT", "8765")),
         )
 
 
