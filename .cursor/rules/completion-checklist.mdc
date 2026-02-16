@@ -1,0 +1,73 @@
+---
+description: Mandatory checklist before completing any feature or significant change
+alwaysApply: true
+---
+
+# Completion Checklist
+
+Before declaring any feature, refactor, or significant change as done, you MUST complete every item on this checklist. Do NOT skip items. Do NOT mark a task complete until all items are addressed.
+
+## 1. Testing (MANDATORY -- do this FIRST)
+
+Nothing is done until it is tested. Both levels are required:
+
+### Manual / E2E Testing
+- Run the affected code paths end-to-end against real (or realistic copy) data
+- Verify happy path AND error/edge cases (bad input, missing files, network errors)
+- Confirm the server starts and all tools are registered (`make run` or equivalent)
+- If a bug is found, fix it and re-test before moving on
+
+### Automated Tests
+- Add or update unit tests in `tests/` for every changed module
+- Tests MUST use fixtures and temp files -- never depend on real user data
+- Run `make test` and confirm **all tests pass with 0 failures**
+- New features require new test cases; refactors must not break existing tests
+- Aim for meaningful coverage: happy path, edge cases, error handling
+
+If tests fail, you are NOT done. Fix the code or the tests and re-run.
+
+## 2. Project Board
+
+Update `.cursor/skills/project-board/board.md`:
+- Move completed items to the **Done** section
+- Update **In Progress** and **Backlog** if scope changed
+- Add any newly discovered work to **Backlog**
+
+## 3. Project Spec
+
+Update `.cursor/skills/project-spec/SKILL.md` if the change affects:
+- Module map (new/renamed/deleted files)
+- Tools table (new/changed/removed tools)
+- Tech stack or dependencies
+- Design decisions list
+- Configuration or environment variables
+
+## 4. Architecture Decisions
+
+Add to `.cursor/skills/project-spec/decisions.md` if the change involved:
+- Choosing between multiple valid approaches
+- A non-obvious tradeoff
+- Deferring an alternative to the backlog
+- Reversing or modifying a previous decision
+
+## 5. README
+
+Update `README.md` if the change affects:
+- Available tools or their parameters
+- Installation or configuration steps
+- Architecture or module structure
+- User-facing behavior or examples
+
+## 6. Dependencies
+
+If dependencies changed:
+- Update `requirements.txt`
+- Remove unused dependencies
+- Add version constraints for new ones
+
+## 7. Git Hygiene
+
+- Confirm you are on a feature branch (`feat/`, `fix/`, `refactor/`, `chore/`), NOT `main`
+- If on `main`, stop and move to a branch before committing (see `git-workflow.mdc`)
+- Commits should be small, focused, and pass tests
+- When the feature is fully done and tested, push the branch and create a PR to `main`

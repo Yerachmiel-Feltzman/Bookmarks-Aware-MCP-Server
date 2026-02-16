@@ -1,0 +1,67 @@
+---
+description: GitHub Flow git workflow -- enforced for all code changes
+alwaysApply: true
+---
+
+# Git Workflow: GitHub Flow
+
+This project uses **GitHub Flow**. All code changes go through feature branches. Direct commits to `main` are forbidden.
+
+## Rules
+
+### 1. `main` is always stable
+- `main` is the production branch. It must always be in a working, tested state.
+- NEVER commit directly to `main`. NEVER.
+- If you are on `main`, create a branch BEFORE making any changes.
+
+### 2. Branch for every change
+- Before starting any work, create a branch from `main`:
+  - Features: `feat/<short-description>` (e.g., `feat/semantic-search`)
+  - Bug fixes: `fix/<short-description>` (e.g., `fix/folder-path-consistency`)
+  - Refactors: `refactor/<short-description>` (e.g., `refactor/agent-driven-enrichment`)
+  - Chores (deps, CI, docs-only): `chore/<short-description>` (e.g., `chore/add-pytest`)
+- Branch names: lowercase, hyphens, no spaces. Keep them short but descriptive.
+
+### 3. Commit discipline
+- Make small, focused commits with clear messages.
+- Each commit should compile and ideally pass tests.
+- Use imperative mood: "add search tests" not "added search tests".
+
+### 4. Merge via Pull Request
+- When the feature is complete and all tests pass, push the branch and create a PR.
+- PR title should summarize the change. PR body should include a summary and test plan.
+- Use `gh pr create` to create PRs from the command line.
+- Merge strategy: **squash and merge** for clean history on `main`.
+
+### 5. Clean up after merge
+- After a PR is merged, delete the feature branch (both local and remote).
+- Pull `main` to stay up to date: `git checkout main && git pull`.
+
+## Workflow Summary
+
+```
+git checkout main
+git pull
+git checkout -b feat/my-feature
+# ... do work, commit, test ...
+git push -u origin feat/my-feature
+gh pr create --title "Add my feature" --body "..."
+# ... PR merged ...
+git checkout main
+git pull
+git branch -d feat/my-feature
+```
+
+## What to do if you realize you're on `main`
+
+If you accidentally started working on `main`:
+1. Stash or note your changes
+2. Create a branch: `git checkout -b feat/whatever`
+3. Your uncommitted changes travel with you to the new branch
+4. Continue working on the branch
+
+If you already committed to `main`:
+1. Create a branch from current state: `git branch feat/whatever`
+2. Reset main: `git checkout main && git reset --hard origin/main`
+3. Switch to branch: `git checkout feat/whatever`
+4. Continue from there
