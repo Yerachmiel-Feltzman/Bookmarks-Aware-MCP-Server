@@ -30,9 +30,19 @@
 - Automatic backup before any write operation
 
 ### Testing & Quality
-- Unit test suite with pytest (53 tests): bookmarks_store, metadata_store, search, enrichment, config
+- Unit test suite with pytest (75 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools
 - `make test` command
 - Bug fix: folder path consistency (root key prefix instead of display name)
+
+### User Flows (v2)
+- `health_check` tool -- diagnostic report: Chrome file, bookmark count, DB status, enrichment coverage
+- `list_bookmarks` tool -- list ALL bookmarks with optional folder filter (enables browsing/reorganization)
+- `add_bookmark` tool -- add new bookmarks to Chrome's bookmarks file
+- `BOOKMARKS_CHROME_PROFILE` env var -- support non-default Chrome profiles
+- Change tracking in SQLite (`bookmark_changes` table) -- every write records before/after state
+- `get_change_history` tool -- view recent changes with timestamps and details
+- `revert_last_change` tool -- undo the most recent change (move back, un-rename, restore deleted)
+- Improved tool descriptions guiding agents through multi-step flows (enrichment, reorganization)
 
 ## In Progress
 
@@ -49,7 +59,7 @@
 - [backlog] P2: Advanced ranking - Implement TF-IDF or BM25 for better relevance scoring
 
 ### Feature Enhancements
-- [backlog] P1: Multiple Chrome profiles - Support profiles beyond "Default"
+- [done] P1: Multiple Chrome profiles - Supported via BOOKMARKS_CHROME_PROFILE env var
 - [backlog] P2: Multi-browser support - Add Firefox, Safari, Edge bookmark reading
 - [backlog] P2: Chrome extension - Real-time bookmark sync, context capture, quick search UI
 

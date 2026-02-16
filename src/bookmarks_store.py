@@ -515,6 +515,55 @@ def get_folder_structure(bookmarks_path: Optional[Path] = None) -> Dict[str, Any
     return folders
 
 
+def add_bookmark(
+    url: str,
+    title: str,
+    folder_path: str,
+    bookmarks_path: Optional[Path] = None,
+) -> bool:
+    """Add a new bookmark to a folder.
+    
+    Args:
+        url: URL of the new bookmark
+        title: Title/name for the bookmark
+        folder_path: Path to target folder (e.g., 'bookmark_bar/Dev/Python')
+        bookmarks_path: Path to bookmarks file
+        
+    Returns:
+        True if successful
+    """
+    if bookmarks_path is None:
+        bookmarks_path = get_chrome_bookmarks_path()
+    
+    backup_bookmarks(bookmarks_path)
+    
+    bookmarks_data = load_bookmarks_file(bookmarks_path)
+    
+    # Find target folder
+    target_folder = _find_folder_by_path(bookmarks_data, folder_path)
+    if not target_folder:
+        print(f"Target folder not found: {folder_path}", file=sys.stderr)
+        return False
+    
+    # Generate a unique ID
+    new_id = _generate_id()
+    
+    # Create the bookmark node
+    new_bookmark = {
+        "date_added": str(int(time.time() * 1000000)),
+        "date_last_used": "0",
+        "id": new_id,
+        "name": title,
+        "type": "url",
+        "url": url,
+    }
+    
+    target_folder.setdefault("children", []).append(new_bookmark)
+    write_bookmarks_file(bookmarks_data, bookmarks_path)
+    
+    return True
+
+
 def bulk_move_bookmarks(
     moves: List[Dict[str, str]],
     bookmarks_path: Optional[Path] = None,

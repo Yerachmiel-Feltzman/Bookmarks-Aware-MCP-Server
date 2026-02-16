@@ -37,7 +37,9 @@ The agent calls `create_folder` and `bulk_reorganize` to move bookmarks. Changes
 
 - **Search** -- Keyword search across URLs, titles, summaries, and tags
 - **Enrichment** -- Agent-driven: MCP fetches pages, your agent (Claude, GPT, etc.) generates summaries and tags
-- **Organization** -- Move, rename, delete bookmarks and create folders directly in Chrome
+- **Organization** -- Move, rename, delete, and add bookmarks; create folders directly in Chrome
+- **Undo / History** -- Every change is tracked; revert any operation with a single tool call
+- **Diagnostics** -- Built-in health check validates setup and identifies issues
 - **Metadata Storage** -- SQLite database for persistent summaries and tags
 - **Cross-platform** -- macOS, Windows, Linux, and Chromium support
 
@@ -73,13 +75,28 @@ Add to your MCP configuration file (typically `~/.cursor/mcp.json`):
 
 Replace `/absolute/path/to/bookmarks-aware-mcp` with the actual path to this project.
 
-## Available Tools
+## First Run
+
+After installation and MCP client configuration:
+
+1. Ask the agent: *"Run the bookmarks health check"*
+2. The agent calls `health_check` and reports whether the Chrome bookmarks file was found, how many bookmarks you have, and any issues.
+3. If it can't find your bookmarks, set `BOOKMARKS_CHROME_PROFILE` to your Chrome profile name (e.g., `"Profile 1"`).
+
+## Available Tools (16)
+
+### Diagnostics
+
+| Tool | Description |
+|------|-------------|
+| `health_check` | Diagnostic check: Chrome file status, bookmark count, metadata DB, enrichment coverage, issues. |
 
 ### Search
 
 | Tool | Description |
 |------|-------------|
-| `get_bookmarks` | Search bookmarks by query, with optional tag filtering. Searches across URL, title, description, summary, and tags. |
+| `list_bookmarks` | List ALL bookmarks (optionally filtered by folder). Use for browsing/reorganization. |
+| `get_bookmarks` | Search bookmarks by keyword with optional tag filtering. |
 | `search_by_tags` | Find bookmarks that match specific tags. |
 | `get_bookmark_metadata` | Get stored summary and tags for a specific URL. |
 
@@ -96,6 +113,7 @@ The enrichment flow is **agent-driven**: the MCP server handles fetching and sto
 
 | Tool | Description |
 |------|-------------|
+| `add_bookmark` | Add a new bookmark to a folder. |
 | `move_bookmark` | Move a bookmark to a different folder. |
 | `rename_bookmark` | Rename a bookmark's title. |
 | `delete_bookmark` | Delete a bookmark. |
@@ -103,17 +121,25 @@ The enrichment flow is **agent-driven**: the MCP server handles fetching and sto
 | `get_folder_structure` | View the folder hierarchy with bookmark counts. |
 | `bulk_reorganize` | Move multiple bookmarks at once. |
 
-All write operations create a `.bak` backup before modifying the bookmarks file.
+### History / Undo
+
+| Tool | Description |
+|------|-------------|
+| `get_change_history` | View recent changes with timestamps and before/after state. |
+| `revert_last_change` | Undo the most recent change (move back, un-rename, un-delete, etc.). |
+
+All write operations create a `.bak` backup and record the change in SQLite for undo support.
 
 ## Architecture
 
 ```
 src/
 ├── main.py            # Entry point
-├── server.py          # MCP server, 11 tool definitions
-├── bookmarks_store.py # Chrome bookmarks read/write
+├── server.py          # MCP server, 16 tool definitions
+├── bookmarks_store.py # Chrome bookmarks read/write/add
 ├── search.py          # Keyword search with metadata support
 ├── metadata_store.py  # SQLite store (~/.bookmarks-mcp/metadata.db)
+├── change_tracker.py  # Change history + undo (bookmark_changes table)
 ├── enrichment.py      # Page fetching + content extraction
 └── config.py          # Configuration via environment variables
 ```
@@ -137,6 +163,7 @@ src/
 - **Agent-driven enrichment** -- No LLM in the server. The calling agent does summarization using whatever model it's running on. Zero setup, best quality.
 - **Local SQLite metadata** -- Summaries and tags stored at `~/.bookmarks-mcp/metadata.db`. Cross-machine sync tracked as future work.
 - **Direct Chrome file writes** -- Bookmarks are modified in-place with automatic backups. Chrome hot-reloads the file.
+- **Change tracking with undo** -- Every write is recorded in SQLite with before/after state. Any change can be reverted.
 - **Extensible search** -- `SearchEngine` protocol allows swapping in semantic search later.
 
 For full decision records with tradeoffs and alternatives, see [decisions.md](.cursor/skills/project-spec/decisions.md).
@@ -152,6 +179,7 @@ The server reads Chrome bookmarks from the default location:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `BOOKMARKS_CHROME_PROFILE` | `Default` | Chrome profile name (e.g., `Profile 1`) |
 | `BOOKMARKS_RATE_LIMIT` | `2.0` | Requests per second for page fetching |
 | `BOOKMARKS_MAX_CONCURRENT` | `5` | Max concurrent page fetches |
 | `BOOKMARKS_MAX_CONTENT` | `50000` | Max chars to extract from a page |

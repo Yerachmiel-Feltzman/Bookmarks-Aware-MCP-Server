@@ -138,3 +138,47 @@ This document records key design decisions, the alternatives considered, and why
 - Agent-driven enrichment already gives us rich text to search across
 
 **Future:** When search quality becomes a bottleneck, add embedding-based search. The protocol interface is ready.
+
+---
+
+## ADR-6: SQLite Change Tracking for Undo Support
+
+**Status:** Accepted
+
+**Context:** Users need to be able to undo bookmark modifications. The existing `.bak` file only keeps a single snapshot and gets overwritten on every write.
+
+**Options considered:**
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Single `.bak` file (existing)** | Simple, always there | Only keeps last state, multiple writes overwrite it |
+| **Timestamped `.bak` files** | Full snapshot history | Disk-heavy, hard to know what changed |
+| **SQLite changelog (chosen)** | Precise before/after per change, queryable, supports selective revert | Requires inverse logic per action type |
+| **Git-based versioning** | Full diff history | Overkill, requires git installed, slow |
+
+**Decision:** Add a `bookmark_changes` table in the existing metadata SQLite database. Each write operation records the action type, URL, and a JSON blob with before/after state. A `reverted` flag tracks which changes have been undone.
+
+**Revert logic per action:**
+- `move` -> move bookmark back to original folder
+- `rename` -> rename back to original title
+- `delete` -> re-add the bookmark with original title and folder
+- `add` -> delete the newly added bookmark
+- `create_folder` -> skip (cannot safely auto-delete a folder that might now have content)
+- `bulk_move` -> move all bookmarks back to their original folders
+
+**Tradeoff:** The `.bak` file is kept as a last-resort safety net. The changelog is the primary undo mechanism. Folder creation revert is skipped because the folder may have received content since creation.
+
+---
+
+## ADR-7: Health Check Tool for Onboarding
+
+**Status:** Accepted
+
+**Context:** First-time users need to validate their setup works. Common issues include wrong Chrome profile, missing bookmarks file, and unenriched bookmarks.
+
+**Decision:** Add a `health_check` tool (no parameters) that returns a diagnostic report: Chrome profile, bookmarks file path and existence, bookmark count, metadata DB status, enrichment coverage, and a list of any issues found.
+
+**Rationale:**
+- Single tool call to validate the entire setup
+- Surfaces the most common issue (wrong Chrome profile) with actionable guidance
+- Also useful for ongoing diagnostics when something seems wrong

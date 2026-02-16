@@ -36,6 +36,7 @@ class Config:
     """Main configuration for the bookmarks MCP server."""
     enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig.from_env)
     metadata_db_path: Optional[Path] = None  # None = use default
+    chrome_profile: str = "Default"  # Chrome profile name
     
     @classmethod
     def from_env(cls) -> "Config":
@@ -46,6 +47,7 @@ class Config:
         return cls(
             enrichment=EnrichmentConfig.from_env(),
             metadata_db_path=db_path,
+            chrome_profile=os.environ.get("BOOKMARKS_CHROME_PROFILE", "Default"),
         )
 
 
