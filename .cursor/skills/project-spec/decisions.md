@@ -99,19 +99,13 @@ This document records key design decisions, the alternatives considered, and why
 
 ## ADR-4: Chrome Extension Deferred
 
-**Status:** Deferred to backlog
+**Status:** Superseded by ADR-8
 
 **Context:** A Chrome extension could provide real-time bookmark sync, add bookmarks with selected text as context, or offer a quick search UI in the browser.
 
-**Decision:** Defer. The MCP server reads the Bookmarks file directly, which is sufficient for now.
+**Original Decision:** Defer. The MCP server reads the Bookmarks file directly, which is sufficient for now.
 
-**Rationale:**
-- The MCP approach already works without any browser extension
-- Chrome file polling covers bookmark changes (no real-time needed yet)
-- The value proposition of an extension is unclear until we use the current tools more
-- Extension development is a separate skill set (JavaScript, Chrome APIs, manifest v3)
-
-**Revisit when:** We find a clear use case that the MCP file-based approach can't handle.
+**Update (Feb 2026):** We discovered that Chrome overwrites direct file modifications from its in-memory state, making file-based writes unreliable while Chrome is running. This was the "clear use case" that prompted building the Chrome extension bridge. See ADR-8 for the full decision record.
 
 ---
 

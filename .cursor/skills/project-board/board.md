@@ -36,6 +36,8 @@
 - `health_check` reports bridge connection status
 - `BOOKMARKS_BRIDGE_PORT` env var for configurable port
 - Auto-reconnect and 20s keepalive to prevent service worker termination
+- URL normalization: trailing-slash tolerance for Chrome URL matching (`_urls_match`, `_find_bookmark` helpers)
+- Better error messages: bridge errors surfaced in tool responses instead of silent fallback
 
 ### Testing & Quality
 - Unit test suite with pytest (101 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools, enrich_all, chrome_bridge

@@ -16,6 +16,7 @@ A Python MCP (Model Context Protocol) server that provides full access to Chrome
 - **aiosqlite** - Async SQLite for metadata storage
 - **httpx** - Async HTTP client for page fetching
 - **trafilatura** - Content extraction from HTML
+- **websockets** - WebSocket server for Chrome extension bridge
 - **Transport**: stdio-based MCP protocol
 - **Build**: Makefile (`make setup`, `make run`)
 
@@ -131,8 +132,8 @@ This means:
 6. **Configurable Chrome profile**: `BOOKMARKS_CHROME_PROFILE` env var
 7. **Chrome extension bridge**: WebSocket bridge routes writes through `chrome.bookmarks` API for live editing; falls back to file when disconnected
 8. **Graceful errors**: Missing files return safe defaults with warnings
-8. **Cross-platform**: Handles Windows, macOS, Linux, and Chromium paths
-9. **Rate limiting**: Configurable limits for page fetching
+9. **Cross-platform**: Handles Windows, macOS, Linux, and Chromium paths
+10. **Rate limiting**: Configurable limits for page fetching
 
 For full reasoning, tradeoffs, and rejected alternatives, see [decisions.md](decisions.md).
 
