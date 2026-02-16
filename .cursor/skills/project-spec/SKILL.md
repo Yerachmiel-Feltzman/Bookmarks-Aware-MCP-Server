@@ -26,7 +26,7 @@ No LLM dependencies -- enrichment is agent-driven (see Enrichment Architecture b
 ```
 src/
 ├── main.py            # Entry point - runs asyncio.run(main())
-├── server.py          # MCP server, 16 tool definitions, caches
+├── server.py          # MCP server, 17 tool definitions, caches
 ├── bookmarks_store.py # Chrome bookmarks read/write/add (cross-platform)
 ├── search.py          # Search engine with metadata support
 ├── metadata_store.py  # SQLite store for summaries and tags
@@ -85,24 +85,32 @@ Agent calls store_bookmark_metadata(url, summary, tags)
   -> MCP stores metadata in SQLite
 ```
 
+Enrichment is **never optional** -- tool descriptions use MUST language to ensure agents always enrich:
+- `add_bookmark` auto-fetches page content and returns it with the add confirmation
+- `enrich_all` batch-processes unenriched bookmarks (configurable batch_size, max 10)
+- `health_check` directs the agent to call `enrich_all` when unenriched bookmarks exist
+- `get_bookmarks` instructs the agent to enrich any result missing metadata
+
 This means:
 - No LLM dependencies in the server
 - Uses whatever model the agent is already running on
 - No API keys or local model setup needed
 - Better quality (frontier model vs local 3B)
+- Enrichment happens automatically on add, and on demand via enrich_all
 
-## Current Tools (16)
+## Current Tools (17)
 
 | Tool | Description |
 |------|-------------|
-| `health_check` | Diagnostic: Chrome file, bookmark count, DB status, issues |
+| `health_check` | Diagnostic: Chrome file, bookmark count, DB status, issues. Directs agent to enrich_all if needed. |
 | `list_bookmarks` | List ALL bookmarks (optional folder filter) |
 | `get_bookmarks` | Search bookmarks with metadata, optional tag filtering |
 | `fetch_page_content` | Fetch URL and extract text (agent then summarizes) |
 | `store_bookmark_metadata` | Store agent-generated summary + tags |
 | `get_bookmark_metadata` | Get stored summary/tags for a URL |
 | `search_by_tags` | Find bookmarks by tag |
-| `add_bookmark` | Add new bookmark to a folder |
+| `enrich_all` | Batch-fetch unenriched bookmarks for agent summarization (batched, with remaining count) |
+| `add_bookmark` | Add new bookmark + auto-fetch content for immediate enrichment |
 | `move_bookmark` | Move bookmark to different folder |
 | `rename_bookmark` | Rename a bookmark |
 | `delete_bookmark` | Delete a bookmark |

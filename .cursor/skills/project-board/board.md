@@ -30,7 +30,7 @@
 - Automatic backup before any write operation
 
 ### Testing & Quality
-- Unit test suite with pytest (75 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools
+- Unit test suite with pytest (85 tests): bookmarks_store, metadata_store, search, enrichment, config, change_tracker, add_bookmark, server_tools, enrich_all
 - `make test` command
 - Bug fix: folder path consistency (root key prefix instead of display name)
 
@@ -43,6 +43,9 @@
 - `get_change_history` tool -- view recent changes with timestamps and details
 - `revert_last_change` tool -- undo the most recent change (move back, un-rename, restore deleted)
 - Improved tool descriptions guiding agents through multi-step flows (enrichment, reorganization)
+- `enrich_all` tool -- batch-fetch unenriched bookmarks for agent summarization (configurable batch_size)
+- `add_bookmark` auto-fetches page content for immediate enrichment
+- Mandatory enrichment: tool descriptions use MUST language; health_check directs to enrich_all
 
 ## In Progress
 

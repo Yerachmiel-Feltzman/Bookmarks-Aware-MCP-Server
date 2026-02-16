@@ -149,7 +149,7 @@ async def health_check_tool() -> list[TextContent]:
     if not report.get("bookmarks_readable"):
         issues.append("Cannot read bookmarks file.")
     if report.get("unenriched_bookmarks", 0) > 0:
-        issues.append(f"{report['unenriched_bookmarks']} bookmarks have no metadata. Use fetch_page_content + store_bookmark_metadata to enrich them.")
+        issues.append(f"{report['unenriched_bookmarks']} bookmarks have no metadata. Call enrich_all to fetch their content in batches, then generate summaries and tags for each.")
 
     report["status"] = "healthy" if not issues else "issues_found"
     report["issues"] = issues
@@ -274,14 +274,76 @@ async def search_by_tags_tool(tags: List[str], limit: int = 10) -> list[TextCont
         return [TextContent(type="text", text=f"Error searching by tags: {e}")]
 
 
+async def enrich_all_tool(batch_size: int = 5) -> list[TextContent]:
+    """Fetch content for unenriched bookmarks in batches for agent summarization."""
+    try:
+        bookmarks = load_bookmarks()
+        if not bookmarks:
+            return [TextContent(type="text", text="No bookmarks found.")]
+
+        bookmark_urls = [b["url"] for b in bookmarks]
+        url_to_title = {b["url"]: b["title"] for b in bookmarks}
+
+        store = await get_metadata_store()
+        needs_enrichment = await store.get_urls_needing_enrichment(bookmark_urls)
+
+        if not needs_enrichment:
+            return [TextContent(type="text", text=json.dumps({
+                "status": "all_enriched",
+                "message": "All bookmarks already have metadata. Nothing to do.",
+                "total_bookmarks": len(bookmarks),
+            }, indent=2))]
+
+        batch = needs_enrichment[:batch_size]
+        remaining = len(needs_enrichment) - len(batch)
+
+        results = []
+        for url in batch:
+            entry: dict = {"url": url, "title": url_to_title.get(url, "")}
+            try:
+                content = await fetch_page_content(url)
+                if content:
+                    entry["content"] = content
+                    entry["content_hash"] = compute_content_hash(content)
+                    entry["status"] = "fetched"
+                else:
+                    entry["status"] = "fetch_failed"
+                    entry["reason"] = "Could not extract content (may require auth or be non-HTML)"
+            except Exception as e:
+                entry["status"] = "fetch_failed"
+                entry["reason"] = str(e)
+            results.append(entry)
+
+        fetched_count = sum(1 for r in results if r["status"] == "fetched")
+        failed_count = sum(1 for r in results if r["status"] == "fetch_failed")
+
+        response = {
+            "batch_results": results,
+            "fetched": fetched_count,
+            "failed": failed_count,
+            "remaining_unenriched": remaining,
+            "instruction": (
+                "For each item with status 'fetched', you MUST generate a 2-3 sentence summary "
+                "and 3-5 tags from the content, then call store_bookmark_metadata for each. "
+                + (f"Then call enrich_all again to process the next batch ({remaining} remaining)."
+                   if remaining > 0 else "This was the last batch. All bookmarks are now processed.")
+            ),
+        }
+
+        return [TextContent(type="text", text=json.dumps(response, indent=2))]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error during bulk enrichment: {e}")]
+
+
 # ============================================================================
 # Write Operations (with change tracking)
 # ============================================================================
 
 async def add_bookmark_tool(url: str, title: str, folder: str) -> list[TextContent]:
-    """Add a new bookmark."""
+    """Add a new bookmark and auto-fetch page content for enrichment."""
     try:
-        success = add_bookmark(url, title, folder)
+        path = _get_bookmarks_path()
+        success = add_bookmark(url, title, folder, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success:
@@ -290,9 +352,34 @@ async def add_bookmark_tool(url: str, title: str, folder: str) -> list[TextConte
                 "title": title,
                 "folder": folder,
             })
-            return [TextContent(type="text", text=json.dumps({
+            result: dict = {
                 "status": "added", "url": url, "title": title, "folder": folder,
-            }, indent=2))]
+            }
+
+            # Auto-fetch page content so the agent can enrich immediately
+            try:
+                content = await fetch_page_content(url)
+                if content:
+                    content_hash = compute_content_hash(content)
+                    result["page_content"] = content
+                    result["content_hash"] = content_hash
+                    result["enrichment_hint"] = (
+                        "Page content fetched. You MUST now generate a 2-3 sentence summary "
+                        "and 3-5 tags from the content above, then call store_bookmark_metadata "
+                        "to save them."
+                    )
+                else:
+                    result["enrichment_hint"] = (
+                        "Could not fetch page content (may require authentication). "
+                        "If you can access the page content another way, generate a summary "
+                        "and tags and call store_bookmark_metadata."
+                    )
+            except Exception:
+                result["enrichment_hint"] = (
+                    "Auto-fetch failed. You can try fetch_page_content manually later."
+                )
+
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
         else:
             return [TextContent(type="text", text=f"Failed to add bookmark. Check that the folder '{folder}' exists. Use get_folder_structure to see available folders, or create_folder to make one.")]
     except Exception as e:
@@ -307,7 +394,8 @@ async def move_bookmark_tool(url: str, target_folder: str) -> list[TextContent]:
         bookmark = next((b for b in bookmarks if b["url"] == url), None)
         original_folder = bookmark["folder"] if bookmark else None
 
-        success = move_bookmark(url, target_folder)
+        path = _get_bookmarks_path()
+        success = move_bookmark(url, target_folder, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success:
@@ -330,7 +418,8 @@ async def rename_bookmark_tool(url: str, new_title: str) -> list[TextContent]:
         bookmark = next((b for b in bookmarks if b["url"] == url), None)
         original_title = bookmark["title"] if bookmark else None
 
-        success = rename_bookmark(url, new_title)
+        path = _get_bookmarks_path()
+        success = rename_bookmark(url, new_title, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success:
@@ -354,7 +443,8 @@ async def delete_bookmark_tool(url: str) -> list[TextContent]:
         original_title = bookmark["title"] if bookmark else None
         original_folder = bookmark["folder"] if bookmark else None
 
-        success = delete_bookmark(url)
+        path = _get_bookmarks_path()
+        success = delete_bookmark(url, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success:
@@ -373,7 +463,8 @@ async def delete_bookmark_tool(url: str) -> list[TextContent]:
 async def create_folder_tool(folder_name: str, parent_folder: str) -> list[TextContent]:
     """Create a new bookmark folder."""
     try:
-        success = create_folder(folder_name, parent_folder)
+        path = _get_bookmarks_path()
+        success = create_folder(folder_name, parent_folder, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success:
@@ -393,7 +484,8 @@ async def create_folder_tool(folder_name: str, parent_folder: str) -> list[TextC
 async def get_folder_structure_tool() -> list[TextContent]:
     """Get current folder structure."""
     try:
-        structure = get_folder_structure()
+        path = _get_bookmarks_path()
+        structure = get_folder_structure(bookmarks_path=path)
         return [TextContent(type="text", text=json.dumps(structure, indent=2))]
     except Exception as e:
         return [TextContent(type="text", text=f"Error getting folder structure: {e}")]
@@ -414,7 +506,8 @@ async def bulk_reorganize_tool(moves: List[Dict[str, str]]) -> list[TextContent]
                     "target_folder": move.get("target_folder"),
                 })
 
-        success_count = bulk_move_bookmarks(moves)
+        path = _get_bookmarks_path()
+        success_count = bulk_move_bookmarks(moves, bookmarks_path=path)
         invalidate_bookmarks_cache()
 
         if success_count > 0:
@@ -461,29 +554,30 @@ async def revert_last_change_tool() -> list[TextContent]:
         details = change["details"]
         url = change.get("url")
         success = False
+        path = _get_bookmarks_path()
 
         if action == "move":
             original_folder = details.get("from_folder")
             if url and original_folder:
-                success = move_bookmark(url, original_folder)
+                success = move_bookmark(url, original_folder, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "rename":
             old_title = details.get("old_title")
             if url and old_title:
-                success = rename_bookmark(url, old_title)
+                success = rename_bookmark(url, old_title, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "delete":
             title = details.get("title", "Untitled")
             folder = details.get("folder", "bookmark_bar")
             if url:
-                success = add_bookmark(url, title, folder)
+                success = add_bookmark(url, title, folder, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "add":
             if url:
-                success = delete_bookmark(url)
+                success = delete_bookmark(url, bookmarks_path=path)
                 invalidate_bookmarks_cache()
 
         elif action == "create_folder":
@@ -504,7 +598,7 @@ async def revert_last_change_tool() -> list[TextContent]:
                 if m.get("url") and m.get("original_folder")
             ]
             if revert_moves:
-                count = bulk_move_bookmarks(revert_moves)
+                count = bulk_move_bookmarks(revert_moves, bookmarks_path=path)
                 success = count > 0
                 invalidate_bookmarks_cache()
 
@@ -545,7 +639,8 @@ def create_server() -> Server:
                     "Run a diagnostic health check on the bookmarks MCP server. "
                     "Returns: Chrome profile and bookmarks file status, bookmark count, "
                     "metadata DB status, enrichment coverage, and any issues found. "
-                    "Run this after first setup to verify everything works, or any time something seems wrong."
+                    "Run this after first setup to verify everything works, or any time something seems wrong. "
+                    "If unenriched bookmarks are found, you MUST call enrich_all to process them."
                 ),
                 inputSchema={"type": "object", "properties": {}},
             ),
@@ -573,8 +668,8 @@ def create_server() -> Server:
                 description=(
                     "Search bookmarks by keyword. Searches across URL, title, description, summary, and tags. "
                     "Results include metadata (summaries/tags) if the bookmark has been enriched. "
-                    "If a result looks relevant but has no summary, call fetch_page_content to get the page text, "
-                    "then generate a summary and tags yourself, and store them with store_bookmark_metadata for next time."
+                    "If a result looks relevant but has no summary, you MUST call fetch_page_content to get the page text, "
+                    "then generate a 2-3 sentence summary and 3-5 tags, and store them with store_bookmark_metadata for next time."
                 ),
                 inputSchema={
                     "type": "object",
@@ -657,13 +752,33 @@ def create_server() -> Server:
                     "required": ["tags"],
                 },
             ),
+            Tool(
+                name="enrich_all",
+                description=(
+                    "Fetch page content for all unenriched bookmarks in batches. Returns extracted text for each. "
+                    "You MUST then generate a 2-3 sentence summary and 3-5 tags for each fetched page, "
+                    "call store_bookmark_metadata for each, then call enrich_all again if remaining > 0. "
+                    "Use this after setup (when health_check reports unenriched bookmarks) or periodically."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "batch_size": {
+                            "type": "integer",
+                            "description": "Number of bookmarks to process per batch (default 5, max 10)",
+                            "default": 5,
+                        },
+                    },
+                },
+            ),
             # --- Write Operations ---
             Tool(
                 name="add_bookmark",
                 description=(
                     "Add a new bookmark to Chrome. "
                     "Use get_folder_structure to find the right folder, or create_folder to make one first. "
-                    "After adding, consider enriching with fetch_page_content + store_bookmark_metadata. "
+                    "The response auto-fetches page content when possible. You MUST then generate a 2-3 sentence "
+                    "summary and 3-5 tags from the content and call store_bookmark_metadata to save them. "
                     "All changes are tracked and can be undone with revert_last_change."
                 ),
                 inputSchema={
@@ -838,6 +953,10 @@ def create_server() -> Server:
                 return [TextContent(type="text", text="Error: 'tags' parameter is required")]
             limit = arguments.get("limit", 10)
             return await search_by_tags_tool(tags, limit)
+
+        elif name == "enrich_all":
+            batch_size = min(arguments.get("batch_size", 5), 10)
+            return await enrich_all_tool(batch_size)
 
         # Write operations
         elif name == "add_bookmark":

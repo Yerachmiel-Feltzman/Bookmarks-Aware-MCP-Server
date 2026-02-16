@@ -30,6 +30,7 @@ class TestServerTools:
             "store_bookmark_metadata",
             "get_bookmark_metadata",
             "search_by_tags",
+            "enrich_all",
             "add_bookmark",
             "move_bookmark",
             "rename_bookmark",
@@ -41,6 +42,6 @@ class TestServerTools:
             "revert_last_change",
         ]
 
-        assert len(tools) == 16
+        assert len(tools) == 17
         for name in expected:
             assert name in tool_names, f"Missing tool: {name}"
